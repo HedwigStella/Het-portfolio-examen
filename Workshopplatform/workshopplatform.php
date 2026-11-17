@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Workshopplatform
  * Description: Accountnavigatie en workshopinschrijvingen.
- * Version: 1.1.1
+ * Version: 1.2.0
  */
 
 defined('ABSPATH') || exit;
@@ -18,8 +18,85 @@ class Workshopplatform
         add_filter('login_redirect', [$this, 'na_inloggen'], 10, 3);
         add_filter('show_admin_bar', [$this, 'toon_toolbar']);
         add_action('admin_init', [$this, 'bescherm_dashboard']);
+        add_filter('manage_wp_inschrijving_posts_columns', [$this, 'beheer_kolommen']);
+        add_action('manage_wp_inschrijving_posts_custom_column', [$this, 'beheer_cel'], 10, 2);
+        add_action('restrict_manage_posts', [$this, 'workshop_filter'], 10, 2);
+        add_action('pre_get_posts', [$this, 'filter_inschrijvingen']);
     }
 
+    public function beheer_kolommen($kolommen)
+{
+    return [
+        'cb' => $kolommen['cb'],
+        'title' => 'Inschrijving',
+        'workshop' => 'Workshop',
+        'deelnemer' => 'Deelnemer',
+        'email' => 'E-mailadres',
+        'date' => 'Inschrijfdatum',
+    ];
+}
+
+public function beheer_cel($kolom, $id)
+{
+    if ($kolom === 'workshop') {
+        $workshop = (int) get_post_meta($id, 'workshop_id', true);
+
+        echo esc_html(
+            get_the_title($workshop) ?: 'Workshop niet meer beschikbaar'
+        );
+    } elseif (in_array($kolom, ['deelnemer', 'email'], true)) {
+        $gebruiker = get_userdata(
+            (int) get_post_field('post_author', $id)
+        );
+
+        $waarde = $gebruiker
+            ? ($kolom === 'email'
+                ? $gebruiker->user_email
+                : $gebruiker->display_name)
+            : 'Account niet meer beschikbaar';
+
+        echo esc_html($waarde);
+    }
+}
+
+public function workshop_filter($berichttype, $positie)
+{
+    if ($berichttype !== 'wp_inschrijving' || $positie !== 'top') {
+        return;
+    }
+
+    $invoer = $_GET['filter_workshop'] ?? '';
+    $gekozen = is_scalar($invoer) ? absint($invoer) : 0;
+
+    $workshops = get_posts([
+        'post_type' => 'workshop',
+        'post_status' => [
+            'publish', 'draft', 'pending',
+            'private', 'future', 'trash',
+        ],
+        'posts_per_page' => -1,
+        'orderby' => 'title',
+        'order' => 'ASC',
+    ]);
+
+    echo '<label class="screen-reader-text" for="filter-workshop">
+        Filter op workshop
+    </label>';
+
+    echo '<select name="filter_workshop" id="filter-workshop">';
+    echo '<option value="0">Alle workshops</option>';
+
+    foreach ($workshops as $workshop) {
+        printf(
+            '<option value="%d" %s>%s</option>',
+            $workshop->ID,
+            selected($gekozen, $workshop->ID, false),
+            esc_html($workshop->post_title)
+        );
+    }
+
+    echo '</select>';
+}
     private function is_deelnemer()
     {
         return is_user_logged_in() && !current_user_can('edit_posts');
@@ -47,10 +124,44 @@ class Workshopplatform
         ) {
             return;
         }
-
+    
         if ($this->is_deelnemer()) {
             wp_safe_redirect(home_url('/workshops/'));
             exit;
+        }
+    }
+    
+    public function filter_inschrijvingen($query)
+    {
+        global $pagenow;
+    
+        if (
+            !is_admin() ||
+            $pagenow !== 'edit.php' ||
+            !$query->is_main_query() ||
+            $query->get('post_type') !== 'wp_inschrijving'
+        ) {
+            return;
+        }
+    
+        $invoer = $_GET['filter_workshop'] ?? '';
+        $workshop = is_scalar($invoer) ? absint($invoer) : 0;
+    
+        if ($workshop) {
+            $voorwaarden = (array) $query->get('meta_query');
+    
+            $voorwaarde = [
+                'key' => 'workshop_id',
+                'value' => $workshop,
+                'compare' => '=',
+            ];
+    
+            $query->set(
+                'meta_query',
+                $voorwaarden
+                    ? ['relation' => 'AND', $voorwaarden, $voorwaarde]
+                    : [$voorwaarde]
+            );
         }
     }
 
