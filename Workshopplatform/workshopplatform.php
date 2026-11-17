@@ -136,11 +136,12 @@ class Workshopplatform
         $id = get_queried_object_id();
 
         if (get_post_type($id) !== 'workshop') {
-            return '';
+        return '';
         }
 
         $gegevens = $this->workshopgegevens($id);
         $status = $this->status($gegevens);
+
         $meldingen = [
             'ongeldig' => 'Inschrijven is momenteel niet mogelijk.',
             'ingeschreven' => 'Je bent ingeschreven voor deze workshop.',
@@ -148,42 +149,67 @@ class Workshopplatform
             'vol' => 'Deze workshop is volgeboekt.',
         ];
 
-        if ($status !== 'open') {
-            return '<p role="status">' . esc_html($meldingen[$status]) . '</p>';
+        if ($status === 'ongeldig') {
+            return '<p role="status">' .
+                esc_html($meldingen[$status]) . '</p>';
         }
 
         ob_start();
         ?>
-        <div style="display:flex;justify-content:space-between;gap:20px;width:100%;padding:24px 0;border-bottom:1px solid #161616;margin-bottom:24px">
+
+            <div style="display:flex;justify-content:space-between;gap:20px;width:100%;padding:24px 0;border-bottom:1px solid #161616;margin-bottom:24px">
             <span>BESCHIKBARE PLAATSEN</span>
             <span><?php echo (int) $gegevens['vrij']; ?></span>
         </div>
 
-        <?php if (!is_user_logged_in()) : ?>
+        <?php if ($status !== 'open') : ?>
+
+            <p role="status">
+                <?php echo esc_html($meldingen[$status]); ?>
+            </p>
+
+        <?php elseif (!is_user_logged_in()) : ?>
+
             <p>
-                <a href="<?php echo esc_url(home_url('/inloggen/')); ?>">Log in</a>
+                <a href="<?php echo esc_url(home_url('/inloggen/')); ?>">
+                Log in
+                </a>
                 of
                 <a href="<?php echo esc_url(home_url('/registreren/')); ?>">
-                    maak een account aan
+                maak een account aan
                 </a>
                 om je in te schrijven.
             </p>
+
         <?php else : ?>
+
             <?php if (($_GET['inschrijving'] ?? '') === 'fout') : ?>
-                <p role="alert">Opslaan is niet gelukt. Probeer het opnieuw.</p>
+                <p role="alert">
+                    Opslaan is niet gelukt. Probeer het opnieuw.
+                </p>
             <?php endif; ?>
 
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="workshop_inschrijven">
-                <input type="hidden" name="workshop_id" value="<?php echo (int) $id; ?>">
+            <form method="post"
+                action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+
+                <input type="hidden"
+                    name="action"
+                    value="workshop_inschrijven">
+
+                <input type="hidden"
+                    name="workshop_id"
+                    value="<?php echo (int) $id; ?>">
 
                 <?php wp_nonce_field('inschrijven_' . $id); ?>
 
-                <button type="submit" style="background:#161616;color:#F7F7F2;border:0;border-radius:999px;padding:14px 24px;font:inherit;cursor:pointer">
+                <button type="submit"
+                        style="background:#161616;color:#F7F7F2;border:0;border-radius:999px;padding:14px 24px;font:inherit;cursor:pointer">
                     Inschrijven
                 </button>
             </form>
+
         <?php endif; ?>
+
         <?php
         return ob_get_clean();
     }
